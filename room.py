@@ -110,13 +110,16 @@ async def match_user(update: Update, context: CallbackContext, user_id):
     await context.bot.send_message(user_id, "Belum ada pasangan yang cocok. Mohon tunggu.")
 
 async def chat_timer(update: Update, context: CallbackContext, user_id, partner_id):
-    """Timer selama 10 menit untuk chat dengan notifikasi setiap menit."""
-    for minute in range(10):
-        await asyncio.sleep(60)  # Tunggu 1 menit
-        await context.bot.send_message(user_id, f"10 menit percakapan kamu dimulai. {minute+1} menit sudah berlalu.")
-        await context.bot.send_message(partner_id, f"10 menit percakapan kamu dimulai. {minute+1} menit sudah berlalu.")
+    """Timer selama 10 menit untuk chat dengan peringatan di 5 menit dan 1 menit."""
+    await asyncio.sleep(300)  # Tunggu 5 menit
+    await context.bot.send_message(user_id, "Sisa waktu 5 menit lagi.")
+    await context.bot.send_message(partner_id, "Sisa waktu 5 menit lagi.")
 
-    # Setelah 10 menit selesai, hentikan percakapan
+    await asyncio.sleep(240)  # Tunggu 4 menit lagi (total 9 menit)
+    await context.bot.send_message(user_id, "Sisa waktu 1 menit lagi.")
+    await context.bot.send_message(partner_id, "Sisa waktu 1 menit lagi.")
+
+    await asyncio.sleep(60)  # Tunggu 1 menit lagi (total 10 menit)
     await context.bot.send_message(user_id, "Waktu percakapan telah selesai.")
     await context.bot.send_message(partner_id, "Waktu percakapan telah selesai.")
     await stop_conversation(update, context, user_id, partner_id)
@@ -160,7 +163,7 @@ async def next_match(update: Update, context: CallbackContext):
             partner_id = rooms[user_id]
             await stop_conversation(update, context, user_id, partner_id)
 
-        # Cari pasangan baru yang memiliki kategori umur yang sama
+        # Cari pasangan baru yang memiliki kategori umur dan gender berbeda
         await match_user(update, context, user_id)
     else:
         await update.message.reply_text("Anda belum memiliki pasangan. Harap tunggu sampai dipasangkan.")

@@ -166,7 +166,7 @@ async def next_match(update: Update, context: CallbackContext):
             partner_id = rooms[user_id]
             await stop_conversation(update, context, user_id, partner_id)
 
-        # Cari pasangan baru yang memiliki kategori umur dan gender berbeda
+        # Cari pasangan baru yang memiliki kategori umur yang sama
         await match_user(update, context, user_id)
     else:
         await update.message.reply_text("Anda belum memiliki pasangan. Harap tunggu sampai dipasangkan.")

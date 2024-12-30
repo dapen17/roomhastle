@@ -51,7 +51,7 @@ async def help_command(update: Update, context: CallbackContext):
     )
 
 async def new(update: Update, context: CallbackContext):
-    """Memulai ulang percakapan dari awal dengan menghapus data pengguna.""" 
+    """Memulai ulang percakapan dari awal dengan menghapus data pengguna."""
     user_id = update.effective_user.id
 
     # Hapus data pengguna yang ada
@@ -85,29 +85,32 @@ async def set_age(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 async def match_user(update: Update, context: CallbackContext, user_id):
-    """Mencocokkan pengguna berdasarkan kategori umur."""
-    user_data = users[user_id]
-    
-    # Cari pasangan yang cocok
-    for other_id, other_data in users.items():
-        if not other_data["matched"] and \
-           other_data["age"] == user_data["age"] and \
-           other_id != user_id:
-            # Pasangkan
-            rooms[user_id] = other_id
-            rooms[other_id] = user_id
-            users[user_id]["matched"] = True
-            users[other_id]["matched"] = True
-            await context.bot.send_message(user_id, "Anda telah dipasangkan! Mulai chat sekarang.")
-            await context.bot.send_message(other_id, "Anda telah dipasangkan! Mulai chat sekarang.")
-            
-            # Mulai timer untuk pasangan ini
-            timers[user_id] = asyncio.create_task(chat_timer(update, context, user_id, other_id))
-            timers[other_id] = timers[user_id]
-            return
+    """Mencocokkan pengguna berdasarkan kategori umur dengan penanganan error."""
+    try:
+        user_data = users[user_id]
 
-    # Jika belum ada pasangan
-    await context.bot.send_message(user_id, "Belum ada pasangan yang cocok. Mohon tunggu.")
+        # Cari pasangan yang cocok
+        for other_id, other_data in users.items():
+            if not other_data["matched"] and \
+               other_data["age"] == user_data["age"] and \
+               other_id != user_id:
+                # Pasangkan
+                rooms[user_id] = other_id
+                rooms[other_id] = user_id
+                users[user_id]["matched"] = True
+                users[other_id]["matched"] = True
+                await context.bot.send_message(user_id, "Anda telah dipasangkan! Mulai chat sekarang.")
+                await context.bot.send_message(other_id, "Anda telah dipasangkan! Mulai chat sekarang.")
+                
+                # Mulai timer untuk pasangan ini
+                timers[user_id] = asyncio.create_task(chat_timer(update, context, user_id, other_id))
+                timers[other_id] = timers[user_id]
+                return
+
+        # Jika belum ada pasangan
+        await context.bot.send_message(user_id, "Belum ada pasangan yang cocok. Mohon tunggu.")
+    except Exception as e:
+        print(f"Terjadi kesalahan saat mencocokkan: {e}")
 
 async def chat_timer(update: Update, context: CallbackContext, user_id, partner_id):
     """Timer selama 10 menit untuk chat dengan peringatan di 5 menit dan 1 menit."""
@@ -178,30 +181,30 @@ async def message_handler(update: Update, context: CallbackContext):
         await update.message.reply_text("Anda belum memiliki pasangan. Ingin mencari pasangan harap melakukan /start lagi.")
 
 async def main():
-    """Main function untuk menjalankan bot.""" 
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    """Main function untuk menjalankan bot."""
+    application = ApplicationBuilder().token(BOT_TOKEN).request_kwargs({
+        'read_timeout': 15,
+        'connect_timeout': 15,
+    }).build()
 
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start), CommandHandler("new", new)],  # Menambahkan /new
+        entry_points=[CommandHandler("start", start), CommandHandler("new", new)],  
         states={  
             AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_age)],
         },
-        fallbacks=[CommandHandler("stop", stop), CommandHandler("next", next_match)],  # Menambahkan perintah next
+        fallbacks=[CommandHandler("stop", stop), CommandHandler("next", next_match)],
     )
 
     application.add_handler(conv_handler)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
-    # Menambahkan handler untuk perintah /stop, /next, dan /help
     application.add_handler(CommandHandler("stop", stop))
     application.add_handler(CommandHandler("next", next_match))
-    application.add_handler(CommandHandler("help", help_command))  # Menambahkan perintah /help
+    application.add_handler(CommandHandler("help", help_command))
 
-    # Menunggu (await) run_polling untuk memastikan coroutine dijalankan
     await application.run_polling()
 
 if __name__ == '__main__':
-    # Panggil aplikasi tanpa asyncio.run() di luar
     import nest_asyncio
-    nest_asyncio.apply()  # Membantu menjalankan event loop dalam Jupyter / IDE lain yang sudah punya event loop
-    asyncio.get_event_loop().run_until_complete(main())  # Gunakan get_event_loop() dan run_until_complete()
+    nest_asyncio.apply()
+    asyncio.get_event_loop().run_until_complete(main())

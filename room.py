@@ -199,7 +199,7 @@ async def main():
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start), CommandHandler("new", new)],  # Menambahkan /new
-        states={
+        states={  
             GENDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_gender)],
             AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_age)],
         },

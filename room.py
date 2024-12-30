@@ -15,7 +15,7 @@ if not BOT_TOKEN:
     raise ValueError("Token bot tidak ditemukan. Pastikan BOT_TOKEN ada di file .env.")
 
 # States untuk ConversationHandler
-AGE = range(1)
+GENDER, AGE = range(2)
 
 # Database sementara
 users = {}  # Menyimpan data pengguna
@@ -32,12 +32,10 @@ async def start(update: Update, context: CallbackContext):
         "/stop - Menghentikan percakapan saat ini\n"
         "/next - Mencari pasangan baru dengan kategori umur yang sama\n"
         "/help - Menampilkan perintah yang tersedia\n\n"
-        "Berapa umurmu? Pilih kategori:\n"
-        "1. Di bawah 18 tahun\n"
-        "2. Di atas 18 tahun",
-        reply_markup=ReplyKeyboardMarkup([["Di bawah 18 tahun", "Di atas 18 tahun"]], one_time_keyboard=True)
+        "Apakah kamu laki-laki atau perempuan? (Balas: cowo/cewe)",
+        reply_markup=ReplyKeyboardMarkup([["cowo", "cewe"]], one_time_keyboard=True)
     )
-    return AGE
+    return GENDER
 
 async def help_command(update: Update, context: CallbackContext):
     """Menampilkan perintah yang tersedia."""
@@ -51,7 +49,7 @@ async def help_command(update: Update, context: CallbackContext):
     )
 
 async def new(update: Update, context: CallbackContext):
-    """Memulai ulang percakapan dari awal dengan menghapus data pengguna."""
+    """Memulai ulang percakapan dari awal dengan menghapus data pengguna.""" 
     user_id = update.effective_user.id
 
     # Hapus data pengguna yang ada
@@ -60,15 +58,34 @@ async def new(update: Update, context: CallbackContext):
 
     # Mulai percakapan dari awal
     await update.message.reply_text(
-        "Silakan pilih kategori umur kamu. (Di bawah 18 tahun / Di atas 18 tahun)",
-        reply_markup=ReplyKeyboardMarkup([["Di bawah 18 tahun", "Di atas 18 tahun"]], one_time_keyboard=True)
+        "Silakan pilih jenis kelamin kamu. (cowo/cewe)",
+        reply_markup=ReplyKeyboardMarkup([["cowo", "cewe"]], one_time_keyboard=True)
+    )
+    return GENDER
+
+async def set_gender(update: Update, context: CallbackContext):
+    """Menyimpan jenis kelamin dan meminta umur."""
+    gender = update.message.text.lower()
+    if gender not in ["cowo", "cewe"]:
+        await update.message.reply_text("Silakan pilih jenis kelamin yang valid: cowo atau cewe.")
+        return GENDER
+
+    context.user_data['gender'] = gender
+    await update.message.reply_text(
+        "Berapa umurmu? Pilih kategori: \n"
+        "1. 15 kebawah\n"
+        "2. 20 kebawah\n"
+        "3. 20 keatas",
+        reply_markup=ReplyKeyboardMarkup(
+            [["15 kebawah", "20 kebawah", "20 keatas"]], one_time_keyboard=True
+        )
     )
     return AGE
 
 async def set_age(update: Update, context: CallbackContext):
     """Menyimpan umur dan mencoba mencocokkan pengguna."""
     age_category = update.message.text.lower()
-    if age_category not in ["di bawah 18 tahun", "di atas 18 tahun"]:
+    if age_category not in ["15 kebawah", "20 kebawah", "20 keatas"]:
         await update.message.reply_text("Silakan pilih kategori umur yang valid.")
         return AGE
 
@@ -77,6 +94,7 @@ async def set_age(update: Update, context: CallbackContext):
 
     # Simpan data pengguna
     users[user_id] = {
+        "gender": context.user_data['gender'],
         "age": context.user_data['age'],
         "matched": False,
     }
@@ -85,44 +103,39 @@ async def set_age(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 async def match_user(update: Update, context: CallbackContext, user_id):
-    """Mencocokkan pengguna berdasarkan kategori umur dengan penanganan error."""
-    try:
-        user_data = users[user_id]
+    """Mencocokkan pengguna berdasarkan gender dan kategori umur."""
+    user_data = users[user_id]
+    
+    # Cari pasangan yang cocok
+    for other_id, other_data in users.items():
+        if not other_data["matched"] and \
+           other_data["gender"] != user_data["gender"] and \
+           other_data["age"] == user_data["age"] and \
+           other_id != user_id:
+            # Pasangkan
+            rooms[user_id] = other_id
+            rooms[other_id] = user_id
+            users[user_id]["matched"] = True
+            users[other_id]["matched"] = True
+            await context.bot.send_message(user_id, "Anda telah dipasangkan! Mulai chat sekarang.")
+            await context.bot.send_message(other_id, "Anda telah dipasangkan! Mulai chat sekarang.")
+            
+            # Mulai timer untuk pasangan ini
+            timers[user_id] = asyncio.create_task(chat_timer(update, context, user_id, other_id))
+            timers[other_id] = timers[user_id]
+            return
 
-        # Cari pasangan yang cocok
-        for other_id, other_data in users.items():
-            if not other_data["matched"] and \
-               other_data["age"] == user_data["age"] and \
-               other_id != user_id:
-                # Pasangkan
-                rooms[user_id] = other_id
-                rooms[other_id] = user_id
-                users[user_id]["matched"] = True
-                users[other_id]["matched"] = True
-                await context.bot.send_message(user_id, "Anda telah dipasangkan! Mulai chat sekarang.")
-                await context.bot.send_message(other_id, "Anda telah dipasangkan! Mulai chat sekarang.")
-                
-                # Mulai timer untuk pasangan ini
-                timers[user_id] = asyncio.create_task(chat_timer(update, context, user_id, other_id))
-                timers[other_id] = timers[user_id]
-                return
-
-        # Jika belum ada pasangan
-        await context.bot.send_message(user_id, "Belum ada pasangan yang cocok. Mohon tunggu.")
-    except Exception as e:
-        print(f"Terjadi kesalahan saat mencocokkan: {e}")
+    # Jika belum ada pasangan
+    await context.bot.send_message(user_id, "Belum ada pasangan yang cocok. Mohon tunggu.")
 
 async def chat_timer(update: Update, context: CallbackContext, user_id, partner_id):
-    """Timer selama 10 menit untuk chat dengan peringatan di 5 menit dan 1 menit."""
-    await asyncio.sleep(300)  # Tunggu 5 menit
-    await context.bot.send_message(user_id, "Sisa waktu 5 menit lagi.")
-    await context.bot.send_message(partner_id, "Sisa waktu 5 menit lagi.")
+    """Timer selama 10 menit untuk chat dengan notifikasi setiap menit."""
+    for minute in range(10):
+        await asyncio.sleep(60)  # Tunggu 1 menit
+        await context.bot.send_message(user_id, f"10 menit percakapan kamu dimulai. {minute+1} menit sudah berlalu.")
+        await context.bot.send_message(partner_id, f"10 menit percakapan kamu dimulai. {minute+1} menit sudah berlalu.")
 
-    await asyncio.sleep(240)  # Tunggu 4 menit lagi (total 9 menit)
-    await context.bot.send_message(user_id, "Sisa waktu 1 menit lagi.")
-    await context.bot.send_message(partner_id, "Sisa waktu 1 menit lagi.")
-
-    await asyncio.sleep(60)  # Tunggu 1 menit lagi (total 10 menit)
+    # Setelah 10 menit selesai, hentikan percakapan
     await context.bot.send_message(user_id, "Waktu percakapan telah selesai.")
     await context.bot.send_message(partner_id, "Waktu percakapan telah selesai.")
     await stop_conversation(update, context, user_id, partner_id)
@@ -166,7 +179,7 @@ async def next_match(update: Update, context: CallbackContext):
             partner_id = rooms[user_id]
             await stop_conversation(update, context, user_id, partner_id)
 
-        # Cari pasangan baru yang memiliki kategori umur yang sama
+        # Cari pasangan baru yang memiliki kategori umur dan gender berbeda
         await match_user(update, context, user_id)
     else:
         await update.message.reply_text("Anda belum memiliki pasangan. Harap tunggu sampai dipasangkan.")
@@ -181,30 +194,31 @@ async def message_handler(update: Update, context: CallbackContext):
         await update.message.reply_text("Anda belum memiliki pasangan. Ingin mencari pasangan harap melakukan /start lagi.")
 
 async def main():
-    """Main function untuk menjalankan bot."""
-    application = ApplicationBuilder().token(BOT_TOKEN).request_kwargs({
-        'read_timeout': 15,
-        'connect_timeout': 15,
-    }).build()
+    """Main function untuk menjalankan bot.""" 
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start), CommandHandler("new", new)],  
+        entry_points=[CommandHandler("start", start), CommandHandler("new", new)],  # Menambahkan /new
         states={  
+            GENDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_gender)],
             AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_age)],
         },
-        fallbacks=[CommandHandler("stop", stop), CommandHandler("next", next_match)],
+        fallbacks=[CommandHandler("stop", stop), CommandHandler("next", next_match)],  # Menambahkan perintah next
     )
 
     application.add_handler(conv_handler)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
+    # Menambahkan handler untuk perintah /stop, /next, dan /help
     application.add_handler(CommandHandler("stop", stop))
     application.add_handler(CommandHandler("next", next_match))
-    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("help", help_command))  # Menambahkan perintah /help
 
+    # Menunggu (await) run_polling untuk memastikan coroutine dijalankan
     await application.run_polling()
 
 if __name__ == '__main__':
+    # Panggil aplikasi tanpa asyncio.run() di luar
     import nest_asyncio
-    nest_asyncio.apply()
-    asyncio.get_event_loop().run_until_complete(main())
+    nest_asyncio.apply()  # Membantu menjalankan event loop dalam Jupyter / IDE lain yang sudah punya event loop
+    asyncio.get_event_loop().run_until_complete(main())  # Gunakan get_event_loop() dan run_until_complete()

@@ -15,7 +15,7 @@ if not BOT_TOKEN:
     raise ValueError("Token bot tidak ditemukan. Pastikan BOT_TOKEN ada di file .env.")
 
 # States untuk ConversationHandler
-GENDER, AGE = range(2)
+AGE = range(1)
 
 # Database sementara
 users = {}  # Menyimpan data pengguna
@@ -32,10 +32,12 @@ async def start(update: Update, context: CallbackContext):
         "/stop - Menghentikan percakapan saat ini\n"
         "/next - Mencari pasangan baru dengan kategori umur yang sama\n"
         "/help - Menampilkan perintah yang tersedia\n\n"
-        "Apakah kamu laki-laki atau perempuan? (Balas: cowo/cewe)",
-        reply_markup=ReplyKeyboardMarkup([["cowo", "cewe"]], one_time_keyboard=True)
+        "Berapa umurmu? Pilih kategori:\n"
+        "1. Di bawah 18 tahun\n"
+        "2. Di atas 18 tahun",
+        reply_markup=ReplyKeyboardMarkup([["Di bawah 18 tahun", "Di atas 18 tahun"]], one_time_keyboard=True)
     )
-    return GENDER
+    return AGE
 
 async def help_command(update: Update, context: CallbackContext):
     """Menampilkan perintah yang tersedia."""
@@ -58,34 +60,15 @@ async def new(update: Update, context: CallbackContext):
 
     # Mulai percakapan dari awal
     await update.message.reply_text(
-        "Silakan pilih jenis kelamin kamu. (cowo/cewe)",
-        reply_markup=ReplyKeyboardMarkup([["cowo", "cewe"]], one_time_keyboard=True)
-    )
-    return GENDER
-
-async def set_gender(update: Update, context: CallbackContext):
-    """Menyimpan jenis kelamin dan meminta umur."""
-    gender = update.message.text.lower()
-    if gender not in ["cowo", "cewe"]:
-        await update.message.reply_text("Silakan pilih jenis kelamin yang valid: cowo atau cewe.")
-        return GENDER
-
-    context.user_data['gender'] = gender
-    await update.message.reply_text(
-        "Berapa umurmu? Pilih kategori: \n"
-        "1. 15 kebawah\n"
-        "2. 20 kebawah\n"
-        "3. 20 keatas",
-        reply_markup=ReplyKeyboardMarkup(
-            [["15 kebawah", "20 kebawah", "20 keatas"]], one_time_keyboard=True
-        )
+        "Silakan pilih kategori umur kamu. (Di bawah 18 tahun / Di atas 18 tahun)",
+        reply_markup=ReplyKeyboardMarkup([["Di bawah 18 tahun", "Di atas 18 tahun"]], one_time_keyboard=True)
     )
     return AGE
 
 async def set_age(update: Update, context: CallbackContext):
     """Menyimpan umur dan mencoba mencocokkan pengguna."""
     age_category = update.message.text.lower()
-    if age_category not in ["15 kebawah", "20 kebawah", "20 keatas"]:
+    if age_category not in ["di bawah 18 tahun", "di atas 18 tahun"]:
         await update.message.reply_text("Silakan pilih kategori umur yang valid.")
         return AGE
 
@@ -94,7 +77,6 @@ async def set_age(update: Update, context: CallbackContext):
 
     # Simpan data pengguna
     users[user_id] = {
-        "gender": context.user_data['gender'],
         "age": context.user_data['age'],
         "matched": False,
     }
@@ -103,13 +85,12 @@ async def set_age(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 async def match_user(update: Update, context: CallbackContext, user_id):
-    """Mencocokkan pengguna berdasarkan gender dan kategori umur."""
+    """Mencocokkan pengguna berdasarkan kategori umur."""
     user_data = users[user_id]
     
     # Cari pasangan yang cocok
     for other_id, other_data in users.items():
         if not other_data["matched"] and \
-           other_data["gender"] != user_data["gender"] and \
            other_data["age"] == user_data["age"] and \
            other_id != user_id:
             # Pasangkan
@@ -179,7 +160,7 @@ async def next_match(update: Update, context: CallbackContext):
             partner_id = rooms[user_id]
             await stop_conversation(update, context, user_id, partner_id)
 
-        # Cari pasangan baru yang memiliki kategori umur dan gender berbeda
+        # Cari pasangan baru yang memiliki kategori umur yang sama
         await match_user(update, context, user_id)
     else:
         await update.message.reply_text("Anda belum memiliki pasangan. Harap tunggu sampai dipasangkan.")
@@ -200,7 +181,6 @@ async def main():
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start), CommandHandler("new", new)],  # Menambahkan /new
         states={  
-            GENDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_gender)],
             AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_age)],
         },
         fallbacks=[CommandHandler("stop", stop), CommandHandler("next", next_match)],  # Menambahkan perintah next

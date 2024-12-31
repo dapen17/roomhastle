@@ -55,7 +55,8 @@ async def start(update: Update, context: CallbackContext):
         "/help - Menampilkan perintah yang tersedia\n\n"
         "Berapa umurmu? Pilih kategori:\n"
         "1. Di bawah 18 tahun\n"
-        "2. Di atas 18 tahun",
+        "2. Di atas 18 tahun\n"
+        "NOTE : TIDAK BISA MENGIRIM GAMBAR, STIKER ATAU VOICENOTE",
         reply_markup=ReplyKeyboardMarkup([["Di bawah 18 tahun", "Di atas 18 tahun"]], one_time_keyboard=True)
     )
     return AGE

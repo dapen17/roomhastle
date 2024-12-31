@@ -1,5 +1,6 @@
 import asyncio
 import os
+import httpx
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
@@ -21,6 +22,26 @@ AGE = range(1)
 users = {}  # Menyimpan data pengguna
 rooms = {}  # Menyimpan pasangan yang sedang chatting
 timers = {}  # Menyimpan timer untuk setiap room
+
+# Function to handle retry logic for HTTP requests
+async def send_message_with_retry(bot, chat_id, text, retries=3, delay=2):
+    """Mengirim pesan dengan mekanisme retry jika terjadi error httpx."""
+    for attempt in range(retries):
+        try:
+            await bot.send_message(chat_id, text)
+            return  # Berhenti jika berhasil
+        except httpx.RemoteProtocolError as e:
+            # Menangani kesalahan khusus httpx
+            if attempt < retries - 1:
+                await asyncio.sleep(delay)  # Tunggu sebelum mencoba lagi
+            else:
+                raise e  # Jika sudah mencapai maksimal retry, lempar error
+        except Exception as e:
+            # Tangani exception lain (misalnya network error)
+            if attempt < retries - 1:
+                await asyncio.sleep(delay)  # Tunggu sebelum mencoba lagi
+            else:
+                raise e
 
 async def start(update: Update, context: CallbackContext):
     """Memulai bot dan memberikan informasi perintah yang tersedia."""
@@ -98,8 +119,8 @@ async def match_user(update: Update, context: CallbackContext, user_id):
             rooms[other_id] = user_id
             users[user_id]["matched"] = True
             users[other_id]["matched"] = True
-            await context.bot.send_message(user_id, "Anda telah dipasangkan! Mulai chat sekarang.")
-            await context.bot.send_message(other_id, "Anda telah dipasangkan! Mulai chat sekarang.")
+            await send_message_with_retry(context.bot, user_id, "Anda telah dipasangkan! Mulai chat sekarang.")
+            await send_message_with_retry(context.bot, other_id, "Anda telah dipasangkan! Mulai chat sekarang.")
             
             # Mulai timer untuk pasangan ini
             timers[user_id] = asyncio.create_task(chat_timer(update, context, user_id, other_id))
@@ -107,21 +128,21 @@ async def match_user(update: Update, context: CallbackContext, user_id):
             return
 
     # Jika belum ada pasangan
-    await context.bot.send_message(user_id, "Belum ada pasangan yang cocok. Mohon tunggu.")
+    await send_message_with_retry(context.bot, user_id, "Belum ada pasangan yang cocok. Mohon tunggu.")
 
 async def chat_timer(update: Update, context: CallbackContext, user_id, partner_id):
     """Timer selama 10 menit untuk chat dengan peringatan di 5 menit dan 1 menit."""
     await asyncio.sleep(300)  # Tunggu 5 menit
-    await context.bot.send_message(user_id, "Sisa waktu 5 menit lagi.")
-    await context.bot.send_message(partner_id, "Sisa waktu 5 menit lagi.")
+    await send_message_with_retry(context.bot, user_id, "Sisa waktu 5 menit lagi.")
+    await send_message_with_retry(context.bot, partner_id, "Sisa waktu 5 menit lagi.")
 
     await asyncio.sleep(240)  # Tunggu 4 menit lagi (total 9 menit)
-    await context.bot.send_message(user_id, "Sisa waktu 1 menit lagi.")
-    await context.bot.send_message(partner_id, "Sisa waktu 1 menit lagi.")
+    await send_message_with_retry(context.bot, user_id, "Sisa waktu 1 menit lagi.")
+    await send_message_with_retry(context.bot, partner_id, "Sisa waktu 1 menit lagi.")
 
     await asyncio.sleep(60)  # Tunggu 1 menit lagi (total 10 menit)
-    await context.bot.send_message(user_id, "Waktu percakapan telah selesai.")
-    await context.bot.send_message(partner_id, "Waktu percakapan telah selesai.")
+    await send_message_with_retry(context.bot, user_id, "Waktu percakapan telah selesai.")
+    await send_message_with_retry(context.bot, partner_id, "Waktu percakapan telah selesai.")
     await stop_conversation(update, context, user_id, partner_id)
 
 async def stop(update: Update, context: CallbackContext):
@@ -148,8 +169,8 @@ async def stop_conversation(update: Update, context: CallbackContext, user_id, p
         del timers[partner_id]
     
     # Kirim pesan pemberitahuan
-    await context.bot.send_message(user_id, "Percakapan telah dihentikan.")
-    await context.bot.send_message(partner_id, "Percakapan telah dihentikan.")
+    await send_message_with_retry(context.bot, user_id, "Percakapan telah dihentikan.")
+    await send_message_with_retry(context.bot, partner_id, "Percakapan telah dihentikan.")
 
 async def next_match(update: Update, context: CallbackContext):
     """Mencari pasangan baru dengan kategori yang sama, tapi bukan pasangan yang lama."""
@@ -173,7 +194,7 @@ async def message_handler(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     if user_id in rooms:
         partner_id = rooms[user_id]
-        await context.bot.send_message(partner_id, update.message.text)
+        await send_message_with_retry(context.bot, partner_id, update.message.text)
     else:
         await update.message.reply_text("Anda belum memiliki pasangan. Ingin mencari pasangan harap melakukan /start lagi.")
 

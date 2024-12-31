@@ -25,14 +25,21 @@ timers = {}  # Menyimpan timer untuk setiap room
 
 # Function to handle retry logic for HTTP requests
 async def send_message_with_retry(bot, chat_id, text, retries=3, delay=2):
-    """Mengirim pesan dengan mekanisme retry jika terjadi error."""
+    """Mengirim pesan dengan mekanisme retry jika terjadi error httpx."""
     for attempt in range(retries):
         try:
             await bot.send_message(chat_id, text)
-            return
-        except Exception as e:
+            return  # Berhenti jika berhasil
+        except httpx.RemoteProtocolError as e:
+            # Menangani kesalahan khusus httpx
             if attempt < retries - 1:
-                await asyncio.sleep(delay)
+                await asyncio.sleep(delay)  # Tunggu sebelum mencoba lagi
+            else:
+                raise e  # Jika sudah mencapai maksimal retry, lempar error
+        except Exception as e:
+            # Tangani exception lain (misalnya network error)
+            if attempt < retries - 1:
+                await asyncio.sleep(delay)  # Tunggu sebelum mencoba lagi
             else:
                 raise e
 
@@ -49,9 +56,7 @@ async def start(update: Update, context: CallbackContext):
         "Berapa umurmu? Pilih kategori:\n"
         "1. Di bawah 18 tahun\n"
         "2. Di atas 18 tahun",
-        reply_markup=ReplyKeyboardMarkup([
-            ["Di bawah 18 tahun", "Di atas 18 tahun"]
-        ], one_time_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup([["Di bawah 18 tahun", "Di atas 18 tahun"]], one_time_keyboard=True)
     )
     return AGE
 
@@ -67,7 +72,7 @@ async def help_command(update: Update, context: CallbackContext):
     )
 
 async def new(update: Update, context: CallbackContext):
-    """Memulai ulang percakapan dari awal dengan menghapus data pengguna."""
+    """Memulai ulang percakapan dari awal dengan menghapus data pengguna.""" 
     user_id = update.effective_user.id
 
     # Hapus data pengguna yang ada
@@ -77,9 +82,7 @@ async def new(update: Update, context: CallbackContext):
     # Mulai percakapan dari awal
     await update.message.reply_text(
         "Silakan pilih kategori umur kamu. (Di bawah 18 tahun / Di atas 18 tahun)",
-        reply_markup=ReplyKeyboardMarkup([
-            ["Di bawah 18 tahun", "Di atas 18 tahun"]
-        ], one_time_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup([["Di bawah 18 tahun", "Di atas 18 tahun"]], one_time_keyboard=True)
     )
     return AGE
 
@@ -105,7 +108,7 @@ async def set_age(update: Update, context: CallbackContext):
 async def match_user(update: Update, context: CallbackContext, user_id):
     """Mencocokkan pengguna berdasarkan kategori umur."""
     user_data = users[user_id]
-
+    
     # Cari pasangan yang cocok
     for other_id, other_data in users.items():
         if not other_data["matched"] and \
@@ -118,7 +121,7 @@ async def match_user(update: Update, context: CallbackContext, user_id):
             users[other_id]["matched"] = True
             await send_message_with_retry(context.bot, user_id, "Anda telah dipasangkan! Mulai chat sekarang.")
             await send_message_with_retry(context.bot, other_id, "Anda telah dipasangkan! Mulai chat sekarang.")
-
+            
             # Mulai timer untuk pasangan ini
             timers[user_id] = asyncio.create_task(chat_timer(update, context, user_id, other_id))
             timers[other_id] = timers[user_id]
@@ -157,14 +160,14 @@ async def stop_conversation(update: Update, context: CallbackContext, user_id, p
         del rooms[user_id]
     if partner_id in rooms:
         del rooms[partner_id]
-
+    
     if user_id in timers:
         timers[user_id].cancel()  # Hentikan timer
         del timers[user_id]
     if partner_id in timers:
         timers[partner_id].cancel()  # Hentikan timer
         del timers[partner_id]
-
+    
     # Kirim pesan pemberitahuan
     await send_message_with_retry(context.bot, user_id, "Percakapan telah dihentikan.")
     await send_message_with_retry(context.bot, partner_id, "Percakapan telah dihentikan.")
@@ -172,10 +175,10 @@ async def stop_conversation(update: Update, context: CallbackContext, user_id, p
 async def next_match(update: Update, context: CallbackContext):
     """Mencari pasangan baru dengan kategori yang sama, tapi bukan pasangan yang lama."""
     user_id = update.effective_user.id
-
+    
     if user_id in users:
         age_category = users[user_id]['age']
-
+        
         # Menghentikan percakapan lama jika ada
         if user_id in rooms:
             partner_id = rooms[user_id]
@@ -191,27 +194,7 @@ async def message_handler(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     if user_id in rooms:
         partner_id = rooms[user_id]
-        if update.message.text:
-            await send_message_with_retry(context.bot, partner_id, update.message.text)
-        elif update.message.photo:
-            await context.bot.send_photo(
-                chat_id=partner_id,
-                photo=update.message.photo[-1].file_id,
-                caption=update.message.caption
-            )
-        elif update.message.sticker:
-            await context.bot.send_sticker(
-                chat_id=partner_id,
-                sticker=update.message.sticker.file_id
-            )
-        elif update.message.voice:
-            await context.bot.send_voice(
-                chat_id=partner_id,
-                voice=update.message.voice.file_id,
-                caption=update.message.caption
-            )
-        else:
-            await update.message.reply_text("Jenis pesan ini belum didukung.")
+        await send_message_with_retry(context.bot, partner_id, update.message.text)
     else:
         await update.message.reply_text("Anda belum memiliki pasangan. Ingin mencari pasangan harap melakukan /start lagi.")
 
@@ -220,22 +203,26 @@ async def main():
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start), CommandHandler("new", new)],
-        states={
+        entry_points=[CommandHandler("start", start), CommandHandler("new", new)],  # Menambahkan /new
+        states={  
             AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_age)],
         },
-        fallbacks=[CommandHandler("stop", stop), CommandHandler("next", next_match)],
+        fallbacks=[CommandHandler("stop", stop), CommandHandler("next", next_match)],  # Menambahkan perintah next
     )
 
     application.add_handler(conv_handler)
-    application.add_handler(MessageHandler(filters.ALL, message_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+
+    # Menambahkan handler untuk perintah /stop, /next, dan /help
     application.add_handler(CommandHandler("stop", stop))
     application.add_handler(CommandHandler("next", next_match))
-    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("help", help_command))  # Menambahkan perintah /help
 
+    # Menunggu (await) run_polling untuk memastikan coroutine dijalankan
     await application.run_polling()
 
 if __name__ == '__main__':
+    # Panggil aplikasi tanpa asyncio.run() di luar
     import nest_asyncio
-    nest_asyncio.apply()
-    asyncio.get_event_loop().run_until_complete(main())
+    nest_asyncio.apply()  # Membantu menjalankan event loop dalam Jupyter / IDE lain yang sudah punya event loop
+    asyncio.get_event_loop().run_until_complete(main())  # Gunakan get_event_loop() dan run_until_complete()

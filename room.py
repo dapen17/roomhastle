@@ -211,42 +211,10 @@ async def main():
         fallbacks=[CommandHandler("stop", stop), CommandHandler("next", next_match)],  # Menambahkan perintah next
     )
 
-async def media_handler(update: Update, context: CallbackContext):
-    """Meneruskan stiker, gambar, dan voice note antar pasangan."""
-    user_id = update.effective_user.id
-    if user_id in rooms:
-        partner_id = rooms[user_id]
-
-        # Cek tipe media
-        if update.message.sticker:
-            await context.bot.send_sticker(partner_id, update.message.sticker.file_id)
-        elif update.message.photo:
-            await context.bot.send_photo(partner_id, update.message.photo[-1].file_id, caption=update.message.caption)
-        elif update.message.voice:
-            await context.bot.send_voice(partner_id, update.message.voice.file_id)
-        else:
-            await update.message.reply_text("Media tidak didukung.")
-    else:
-        await update.message.reply_text("Anda belum memiliki pasangan. Gunakan /start untuk mencari pasangan.")
-
-async def main():
-    """Main function untuk menjalankan bot.""" 
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start), CommandHandler("new", new)],  # Menambahkan /new
-        states={  
-            AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_age)],
-        },
-        fallbacks=[CommandHandler("stop", stop), CommandHandler("next", next_match)],  # Menambahkan perintah next
-    )
-
-    # Tambahkan semua handler
     application.add_handler(conv_handler)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
-    application.add_handler(MessageHandler(filters.STICKER, media_handler))
-    application.add_handler(MessageHandler(filters.PHOTO, media_handler))
-    application.add_handler(MessageHandler(filters.VOICE, media_handler))
+
+    # Menambahkan handler untuk perintah /stop, /next, dan /help
     application.add_handler(CommandHandler("stop", stop))
     application.add_handler(CommandHandler("next", next_match))
     application.add_handler(CommandHandler("help", help_command))  # Menambahkan perintah /help
@@ -255,6 +223,7 @@ async def main():
     await application.run_polling()
 
 if __name__ == '__main__':
+    # Panggil aplikasi tanpa asyncio.run() di luar
     import nest_asyncio
     nest_asyncio.apply()  # Membantu menjalankan event loop dalam Jupyter / IDE lain yang sudah punya event loop
     asyncio.get_event_loop().run_until_complete(main())  # Gunakan get_event_loop() dan run_until_complete()

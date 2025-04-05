@@ -188,7 +188,7 @@ async def match_user(update: Update, context: CallbackContext, user_id):
             return
 
     # Jika tidak ada pasangan yang ditemukan
-    await send_message_with_retry(context.bot, user_id, "Belum ada pasangan yang cocok. Mohon tunggu.")
+    await send_message_with_retry(context.bot, user_id, "Belum ada pasangan yang cocok. Mohon tunggu, jika dirasa tidak ketemu, mulai /start lagi.")
 
 
 async def chat_timer(update: Update, context: CallbackContext, user_id, partner_id):

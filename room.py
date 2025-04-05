@@ -8,8 +8,9 @@ from telegram.ext import (
     CallbackContext, ConversationHandler
 )
 from telegram.ext import CallbackQueryHandler
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
+
 # Load token dari file .env
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -64,7 +65,7 @@ async def start(update: Update, context: CallbackContext):
             await update.message.reply_text(
                 "Untuk mengakses fitur bot ini, Anda perlu bergabung dengan channel kami.\n"
                 f"Silakan join ke sini untuk dapat mengakses fitur bot: {CHANNEL_LINK}",
-                reply_markup=InlineKeyboardMarkup([[
+                reply_markup=InlineKeyboardMarkup([[ 
                     InlineKeyboardButton("Join Channel", url=CHANNEL_LINK),
                     InlineKeyboardButton("Sudah Bergabung", callback_data="already_joined")  # Tombol untuk yang sudah bergabung
                 ]])  # Tombol untuk bergabung dengan channel dan tombol untuk yang sudah bergabung
@@ -92,8 +93,6 @@ async def start(update: Update, context: CallbackContext):
         reply_markup=ReplyKeyboardMarkup([["Mulai RP"]], one_time_keyboard=True)
     )
     return RP_START
-
-from telegram.ext import CallbackQueryHandler
 
 async def button_handler(update: Update, context: CallbackContext):
     """Menangani klik pada tombol InlineKeyboard."""
@@ -127,7 +126,6 @@ async def button_handler(update: Update, context: CallbackContext):
                 await query.message.reply_text(
                     "Memulai bot nya dengan cara klik atau ketik /start lagi."
                 )
-
 
 
 async def help_command(update: Update, context: CallbackContext):
@@ -278,7 +276,7 @@ async def message_handler(update: Update, context: CallbackContext):
         )
 
 async def report(update: Update, context: CallbackContext):
-    """Mengirimkan laporan percakapan ke grup admin."""
+    """Mengirimkan laporan percakapan ke grup admin.""" 
     user_id = update.effective_user.id
 
     # Pastikan pengguna memiliki pasangan yang sedang aktif
@@ -333,23 +331,22 @@ async def report(update: Update, context: CallbackContext):
     await update.message.reply_text("Laporan percakapan telah dikirim ke admin.")
 
 
-
 # ------------------- MAIN -------------------
 
 async def main():
-    """Main function untuk menjalankan bot."""
+    """Main function untuk menjalankan bot.""" 
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # Conversation handler untuk proses awal pengambilan umur
     conv_handler = ConversationHandler(
-        entry_points=[
+        entry_points=[ 
             CommandHandler("start", start),
             CommandHandler("new", new)
         ],
-        states={
+        states={ 
             RP_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, start_rp)],
         },
-        fallbacks=[
+        fallbacks=[ 
             CommandHandler("stop", stop),
             CommandHandler("next", next_match),
         ],
@@ -361,22 +358,10 @@ async def main():
     application.add_handler(CommandHandler("stop", stop))
     application.add_handler(CommandHandler("next", next_match))
     application.add_handler(CommandHandler("report", report))  # Menambahkan handler untuk /report
-    # Menambahkan handler untuk tombol
-    application.add_handler(CallbackQueryHandler(button_handler))
-
-
-    # Handler untuk semua pesan teks biasa
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))  # Menambahkan handler untuk pesan teks
 
     # Jalankan bot
-    print("Bot sedang berjalan...")
     await application.run_polling()
 
-if __name__ == '__main__':
-    import nest_asyncio
-    nest_asyncio.apply()
-
-    try:
-        asyncio.get_event_loop().run_until_complete(main())
-    except (KeyboardInterrupt, SystemExit):
-        print("Bot dihentikan.")
+if __name__ == "__main__":
+    asyncio.run(main())

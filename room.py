@@ -37,16 +37,17 @@ async def send_message_with_retry(bot, chat_id, text, retries=3, delay=2):
         try:
             await bot.send_message(chat_id, text)
             return  # Berhenti jika berhasil
-        except httpx.RemoteProtocolError as e:
+        except (httpx.RequestError, httpx.LocalProtocolError) as e:  # Tangani error jaringan
+            if attempt < retries - 1:
+                await asyncio.sleep(delay)  # Tunggu beberapa detik sebelum mencoba lagi
+            else:
+                raise e  # Jika setelah retry gagal, raise error
+        except Exception as e:  # Tangani error lain jika ada
             if attempt < retries - 1:
                 await asyncio.sleep(delay)
             else:
                 raise e
-        except Exception as e:
-            if attempt < retries - 1:
-                await asyncio.sleep(delay)
-            else:
-                raise e
+
 
 # ------------------- COMMANDS -------------------
 
@@ -100,12 +101,12 @@ async def button_handler(update: Update, context: CallbackContext):
     query = update.callback_query
     user_id = query.from_user.id
 
-    # Jika pengguna menekan tombol "Sudah Bergabung"
-    if query.data == "already_joined":
-        await query.answer()  # Menutup interaksi tombol
-        
-        # Cek lagi apakah pengguna sudah bergabung atau belum
-        try:
+    try:
+        # Jika pengguna menekan tombol "Sudah Bergabung"
+        if query.data == "already_joined":
+            await query.answer()  # Menutup interaksi tombol
+            
+            # Cek lagi apakah pengguna sudah bergabung atau belum
             chat_member = await context.bot.get_chat_member(CHANNEL_ID, user_id)
             if chat_member.status in ['left', 'kicked']:  # Jika pengguna masih belum bergabung
                 await query.message.reply_text(
@@ -115,18 +116,18 @@ async def button_handler(update: Update, context: CallbackContext):
                 )
             else:
                 # Jika sudah bergabung, kirimkan pemberitahuan
-                if query.message:
-                    await query.message.reply_text(
-                        "Terima kasih telah bergabung! Sekarang anda dapat memulai bot."
-                    )
+                await query.message.reply_text(
+                    "Terima kasih telah bergabung! Sekarang anda dapat memulai bot."
+                )
                 # Panggil fungsi /start untuk melanjutkan interaksi bot
                 await start(update, context)
-        except Exception as e:
-            print(f"Error while checking membership after button press: {e}")
-            if query.message:
-                await query.message.reply_text(
-                    "Memulai bot nya dengan cara klik atau ketik /start lagi."
-                )
+    except Exception as e:
+        print(f"Error while checking membership after button press: {e}")
+        if query.message:
+            await query.message.reply_text(
+                "Memulai bot nya dengan cara klik atau ketik /start lagi."
+            )
+
 
 
 async def help_command(update: Update, context: CallbackContext):
@@ -169,6 +170,7 @@ async def match_user(update: Update, context: CallbackContext, user_id):
     """Mencari pasangan tanpa kategori umur, hanya berdasarkan availability."""
     user_data = users[user_id]
 
+    # Cari pasangan yang belum dipasangkan
     for other_id, other_data in users.items():
         if not other_data["matched"] and other_id != user_id:
             # Pasangkan user
@@ -180,12 +182,14 @@ async def match_user(update: Update, context: CallbackContext, user_id):
             await send_message_with_retry(context.bot, user_id, "Anda telah dipasangkan! Mulai chat sekarang.")
             await send_message_with_retry(context.bot, other_id, "Anda telah dipasangkan! Mulai chat sekarang.")
 
-            # Mulai timer
+            # Mulai timer percakapan
             timers[user_id] = asyncio.create_task(chat_timer(update, context, user_id, other_id))
             timers[other_id] = timers[user_id]
             return
 
+    # Jika tidak ada pasangan yang ditemukan
     await send_message_with_retry(context.bot, user_id, "Belum ada pasangan yang cocok. Mohon tunggu.")
+
 
 async def chat_timer(update: Update, context: CallbackContext, user_id, partner_id):
     """Timer percakapan 10 menit, dengan notifikasi 5 menit dan 1 menit terakhir."""
@@ -233,10 +237,12 @@ async def next_match(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
     if user_id in users:
+        # Jika pengguna sudah memiliki pasangan aktif, hentikan percakapan sebelumnya
         if user_id in rooms:
             partner_id = rooms[user_id]
             await stop_conversation(update, context, user_id, partner_id)
 
+        # Cari pasangan baru
         await match_user(update, context, user_id)
     else:
         await update.message.reply_text("Kamu belum memulai percakapan. Silakan gunakan /start terlebih dahulu.")
@@ -352,15 +358,13 @@ async def main():
         ],
     )
 
-    # Tambahkan semua handler ke aplikasi
+    # Menambahkan semua handler ke aplikasi
     application.add_handler(conv_handler)
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("stop", stop))
     application.add_handler(CommandHandler("next", next_match))
     application.add_handler(CommandHandler("report", report))  # Menambahkan handler untuk /report
-    # Menambahkan handler untuk tombol
-    application.add_handler(CallbackQueryHandler(button_handler))
-
+    application.add_handler(CallbackQueryHandler(button_handler))  # Handler untuk tombol
 
     # Handler untuk semua pesan teks biasa
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
